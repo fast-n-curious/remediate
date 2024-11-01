@@ -1,0 +1,223 @@
+apiVersion: kyverno.io/v1
+kind: ClusterPolicy
+metadata:
+  name: remediate-disallow-selinux
+  annotations:
+    policies.kyverno.io/title: Disallow SELinux
+    policies.kyverno.io/category: Pod Security Standards (Baseline)
+    policies.kyverno.io/severity: medium
+    policies.kyverno.io/subject: Pod
+    kyverno.io/kyverno-version: 1.6.0
+    kyverno.io/kubernetes-version: "1.22-1.23"
+    policies.kyverno.io/description: >-
+      SELinux options can be used to escalate privileges and should not be allowed. This policy ensures that the fields
+      spec.securityContext.seLinuxOptions.type, spec.containers[*].securityContext.seLinuxOptions.type, 
+      spec.initContainers[*].securityContext.seLinuxOptions, and spec.ephemeralContainers[*].securityContext.seLinuxOptions.type
+      must either be unset if not set to the allowed values container_t, container_init_t, or container_kvm_t.
+      The "user" and "role" fields should not be present under the spec.securityContext.seLinuxOptions.*, 
+      spec.containers[*].securityContext.seLinuxOptions.*, spec.initContainers[*].securityContext.seLinuxOptions.*, and 
+      spec.ephemeralContainers[*].securityContext.seLinuxOptions.* and will be removed if set to any value.
+spec:
+  background: false
+  rules:
+    - name: remove-selinux-type-podspec
+      match:
+        any:
+          - resources:
+              kinds:
+                - Deployment
+                - StatefulSet
+                - Job
+                - DaemonSet
+      preconditions:
+        all:
+          - key: "{{ request.object.spec.template.spec.securityContext.seLinuxOptions.type || '' | length(@) }}"
+            operator: NotEquals
+            value: 0 
+          - key: "{{ request.object.spec.template.spec.securityContext.seLinuxOptions.type || '' }}"
+            operator: AnyNotIn
+            value:
+              - "container_t"
+              - "container_init_t"
+              - "container_kvm_t"
+      mutate:
+        patchesJson6902: |-
+          - path: /spec/template/spec/securityContext/seLinuxOptions/type
+            op: remove
+    - name: remove-selinux-user-podspec
+      match:
+        any:
+          - resources:
+              kinds:
+                - Deployment
+                - StatefulSet
+                - Job
+                - DaemonSet
+      preconditions:
+        all:
+          - key: "{{ request.object.spec.template.spec.securityContext.seLinuxOptions.user || '' | length(@) }}"
+            operator: NotEquals
+            value: 0 
+      mutate:
+        patchesJson6902: |-
+          - path: /spec/template/spec/securityContext/seLinuxOptions/user
+            op: remove
+    - name: remove-selinux-role-podspec
+      match:
+        any:
+          - resources:
+              kinds:
+                - Deployment
+                - StatefulSet
+                - Job
+                - DaemonSet
+      preconditions:
+        all:
+          - key: "{{ request.object.spec.template.spec.securityContext.seLinuxOptions.role || '' | length(@) }}"
+            operator: NotEquals
+            value: 0 
+      mutate:
+        patchesJson6902: |-
+          - path: /spec/template/spec/securityContext/seLinuxOptions/role
+            op: remove
+    - name: remove-selinux-type-container
+      match:
+        any:
+          - resources:
+              kinds:
+                - Deployment
+                - StatefulSet
+                - Job
+                - DaemonSet
+      mutate:
+        foreach:
+          - list: request.object.spec.template.spec.containers[]
+            order: Descending
+            preconditions:
+              all:
+              - key: "{{ element.securityContext.seLinuxOptions.type || '' | length(@) }}"
+                operator: NotEquals
+                value: 0 
+              - key: "{{ element.securityContext.seLinuxOptions.type || `[]` }}"
+                operator: AnyNotIn
+                value:
+                  - "container_t"
+                  - "container_init_t"
+                  - "container_kvm_t"
+            patchesJson6902: |-
+              - op: remove
+                path: /spec/template/spec/containers/{{elementIndex}}/securityContext/seLinuxOptions/type
+          - list: request.object.spec.template.spec.initContainers[]
+            order: Descending
+            preconditions:
+              all:
+              - key: "{{ element.securityContext.seLinuxOptions.type || '' | length(@) }}"
+                operator: NotEquals
+                value: 0 
+              - key: "{{ element.securityContext.seLinuxOptions.type || `[]` }}"
+                operator: AnyNotIn
+                value:
+                  - "container_t"
+                  - "container_init_t"
+                  - "container_kvm_t"
+            patchesJson6902: |-
+              - op: remove
+                path: /spec/template/spec/initContainers/{{elementIndex}}/securityContext/seLinuxOptions/type
+          - list: request.object.spec.template.spec.ephemeralContainers[]
+            order: Descending
+            preconditions:
+              all:
+              - key: "{{ element.securityContext.seLinuxOptions.type || '' | length(@) }}"
+                operator: NotEquals
+                value: 0 
+              - key: "{{ element.securityContext.seLinuxOptions.type || `[]` }}"
+                operator: AnyNotIn
+                value:
+                  - "container_t"
+                  - "container_init_t"
+                  - "container_kvm_t"
+            patchesJson6902: |-
+              - op: remove
+                path: /spec/template/spec/ephemeralContainers/{{elementIndex}}/securityContext/seLinuxOptions/type
+    - name: remove-selinux-user-container
+      match:
+        any:
+          - resources:
+              kinds:
+                - Deployment
+                - StatefulSet
+                - Job
+                - DaemonSet
+      mutate:
+        foreach:
+          - list: request.object.spec.template.spec.containers[]
+            order: Descending
+            preconditions:
+              all:
+              - key: "{{ element.securityContext.seLinuxOptions.user || '' | length(@) }}"
+                operator: NotEquals
+                value: 0 
+            patchesJson6902: |-
+              - op: remove
+                path: /spec/template/spec/containers/{{elementIndex}}/securityContext/seLinuxOptions/user
+          - list: request.object.spec.template.spec.initContainers[]
+            order: Descending
+            preconditions:
+              all:
+              - key: "{{ element.securityContext.seLinuxOptions.user || '' | length(@) }}"
+                operator: NotEquals
+                value: 0 
+            patchesJson6902: |-
+              - op: remove
+                path: /spec/template/spec/initContainers/{{elementIndex}}/securityContext/seLinuxOptions/user
+          - list: request.object.spec.template.spec.ephemeralContainers[]
+            order: Descending
+            preconditions:
+              all:
+              - key: "{{ element.securityContext.seLinuxOptions.user || '' | length(@) }}"
+                operator: NotEquals
+                value: 0 
+            patchesJson6902: |-
+              - op: remove
+                path: /spec/template/spec/ephemeralContainers/{{elementIndex}}/securityContext/seLinuxOptions/user
+    - name: remove-selinux-role-container
+      match:
+        any:
+          - resources:
+              kinds:
+                - Deployment
+                - StatefulSet
+                - Job
+                - DaemonSet
+      mutate:
+        foreach:
+          - list: request.object.spec.template.spec.containers[]
+            order: Descending
+            preconditions:
+              all:
+              - key: "{{ element.securityContext.seLinuxOptions.role || '' | length(@) }}"
+                operator: NotEquals
+                value: 0 
+            patchesJson6902: |-
+              - op: remove
+                path: /spec/template/spec/containers/{{elementIndex}}/securityContext/seLinuxOptions/role
+          - list: request.object.spec.template.spec.initContainers[]
+            order: Descending
+            preconditions:
+              all:
+              - key: "{{ element.securityContext.seLinuxOptions.role || '' | length(@) }}"
+                operator: NotEquals
+                value: 0 
+            patchesJson6902: |-
+              - op: remove
+                path: /spec/template/spec/initContainers/{{elementIndex}}/securityContext/seLinuxOptions/role
+          - list: request.object.spec.template.spec.ephemeralContainers[]
+            order: Descending
+            preconditions:
+              all:
+              - key: "{{ element.securityContext.seLinuxOptions.user || '' | length(@) }}"
+                operator: NotEquals
+                value: 0 
+            patchesJson6902: |-
+              - op: remove
+                path: /spec/template/spec/ephemeralContainers/{{elementIndex}}/securityContext/seLinuxOptions/role
